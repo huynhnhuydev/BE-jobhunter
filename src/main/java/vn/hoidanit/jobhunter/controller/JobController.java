@@ -1,5 +1,6 @@
 package vn.hoidanit.jobhunter.controller;
 
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -12,7 +13,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
+
 import com.turkraft.springfilter.boot.Filter;
 import jakarta.validation.Valid;
 import vn.hoidanit.jobhunter.domain.Job;
@@ -28,9 +32,12 @@ import vn.hoidanit.jobhunter.util.error.IdInvalidException;
 public class JobController {
 
     private final JobService jobService;
+    private final RestTemplate restTemplate;
+    private final String predictClusterApi = "http://localhost:8000"; // URL của API phân cụm người dùng
 
-    public JobController(JobService jobService) {
+    public JobController(JobService jobService, RestTemplate restTemplate) {
         this.jobService = jobService;
+        this.restTemplate = restTemplate;
     }
 
     @PostMapping("/jobs")
@@ -81,5 +88,36 @@ public class JobController {
             Pageable pageable) {
 
         return ResponseEntity.ok().body(this.jobService.fetchAll(spec, pageable));
+    }
+
+    @GetMapping("/job-cluster/jobs")
+    @ApiMessage("Get jobs by user cluster")
+    public ResponseEntity<ResultPaginationDTO> getJobsByCluster(
+            @RequestParam("userId") Long userId,
+            @Filter Specification<Job> spec,
+            Pageable pageable) throws IdInvalidException {
+
+        // Gọi API phân cụm người dùng để lấy cluster của người dùng
+        String apiUrl = String.format("%s/predict-user-cluster/%d",
+                predictClusterApi, userId);
+        ResponseEntity<Map> response = restTemplate.getForEntity(apiUrl, Map.class);
+
+        if (response.getStatusCode().is2xxSuccessful()) {
+            // Lấy cluster từ API trả về
+            int userCluster = (Integer) response.getBody().get("cluster");
+
+            // Tạo Specification để lọc công việc theo cluster
+            Specification<Job> clusterSpec = (root, query, criteriaBuilder) -> criteriaBuilder
+                    .equal(root.get("cluster"), userCluster);
+
+            // Kết hợp bộ lọc cluster với các bộ lọc khác (nếu có)
+            Specification<Job> combinedSpec = spec.and(clusterSpec);
+
+            // Truy vấn công việc theo cluster và phân trang
+            ResultPaginationDTO jobs = this.jobService.fetchAll(combinedSpec, pageable);
+            return ResponseEntity.ok().body(jobs);
+        } else {
+            throw new IdInvalidException("Failed to retrieve user cluster.");
+        }
     }
 }

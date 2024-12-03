@@ -129,6 +129,14 @@ public class UserService {
         res.setCreatedAt(user.getCreatedAt());
         res.setGender(user.getGender());
         res.setAddress(user.getAddress());
+        res.setSalary(user.getSalary());
+        res.setLevel(user.getLevel());
+        if (user.getSkills() != null) {
+            List<String> skills = user.getSkills()
+                    .stream().map(item -> item.getName())
+                    .collect(Collectors.toList());
+            res.setSkills(skills);
+        }
 
         if (user.getCompany() != null) {
             com.setId(user.getCompany().getId());

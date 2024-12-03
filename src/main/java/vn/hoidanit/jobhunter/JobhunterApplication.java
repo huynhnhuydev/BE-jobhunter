@@ -15,7 +15,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableAsync
 @EnableScheduling
 public class JobhunterApplication {
-
 	public static void main(String[] args) {
 		SpringApplication.run(JobhunterApplication.class, args);
 	}
