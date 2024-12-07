@@ -33,7 +33,7 @@ public class JobController {
 
     private final JobService jobService;
     private final RestTemplate restTemplate;
-    private final String predictClusterApi = "http://localhost:8000"; // URL của API phân cụm người dùng
+    private final String ClusterApi = "http://localhost:8000"; // URL của API phân cụm người dùng
 
     public JobController(JobService jobService, RestTemplate restTemplate) {
         this.jobService = jobService;
@@ -43,20 +43,42 @@ public class JobController {
     @PostMapping("/jobs")
     @ApiMessage("Create a job")
     public ResponseEntity<ResCreateJobDTO> create(@Valid @RequestBody Job job) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(this.jobService.create(job));
+        // Tạo mới job
+        ResCreateJobDTO createdJob = this.jobService.create(job);
+
+        String apiUrl = String.format("%s/cluster", ClusterApi); // Địa chỉ API /cluster
+        ResponseEntity<Map> response = restTemplate.getForEntity(apiUrl, Map.class);
+        if (response.getStatusCode().is2xxSuccessful()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdJob);
+        } else {
+            throw new RuntimeException("Failed to call /cluster API after creating job.");
+        }
     }
 
     @PutMapping("/jobs")
     @ApiMessage("Update a job")
     public ResponseEntity<ResUpdateJobDTO> update(@Valid @RequestBody Job job) throws IdInvalidException {
+        // Kiểm tra xem job có tồn tại trong cơ sở dữ liệu không
         Optional<Job> currentJob = this.jobService.fetchJobById(job.getId());
         if (!currentJob.isPresent()) {
             throw new IdInvalidException("Job not found");
         }
 
-        return ResponseEntity.ok()
-                .body(this.jobService.update(job, currentJob.get()));
+        // Cập nhật job
+        ResUpdateJobDTO updatedJob = this.jobService.update(job, currentJob.get());
+
+        if (updatedJob != null) {
+            String apiUrl = String.format("%s/cluster", ClusterApi); // Địa chỉ API /cluster
+            ResponseEntity<Map> response = restTemplate.getForEntity(apiUrl, Map.class);
+            if (response.getStatusCode().is2xxSuccessful()) {
+                return ResponseEntity.status(HttpStatus.OK).body(updatedJob); // Trả về kết quả job đã được cập nhật
+            } else {
+                throw new RuntimeException("Failed to call /cluster API after updating job.");
+            }
+        } else {
+            // Nếu cập nhật không thành công, trả về lỗi
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+        }
     }
 
     @DeleteMapping("/jobs/{id}")
@@ -99,7 +121,7 @@ public class JobController {
 
         // Gọi API phân cụm người dùng để lấy cluster của người dùng
         String apiUrl = String.format("%s/predict-user-cluster/%d",
-                predictClusterApi, userId);
+                ClusterApi, userId);
         ResponseEntity<Map> response = restTemplate.getForEntity(apiUrl, Map.class);
 
         if (response.getStatusCode().is2xxSuccessful()) {

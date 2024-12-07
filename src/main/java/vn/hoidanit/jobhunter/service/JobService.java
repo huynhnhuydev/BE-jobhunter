@@ -80,7 +80,6 @@ public class JobService {
                     .collect(Collectors.toList());
             dto.setSkills(skills);
         }
-
         return dto;
     }
 
